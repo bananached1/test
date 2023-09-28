@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <link rel="stylesheet" href="style.css">
+  <link rel="icon" type="image/png" href="images/favicon.png">
+  <title>Home</title>
+</head>
+
+<body>
+  <div class="icon-links">
+    <a href="text.html">
+      <img src="images/voice.png" type="image/png" height="60" border="0">
+    </a>
+    <a href="share.html">
+      <img src="images/share.png" type="image/png" height="60" border="0">
+    </a>
+    <a href="history.html">
+      <img src="images/history.png" type="image/png" height="60" border="0">
+    </a>
+    <a href="settings.html">
+      <img src="images/settings.png" type="image/png" height="60" border="0">
+    </a>
+  </div>
+
+  <div id="chatbox"></div>
+  <div class="input-container">
+    <input type="text" id="userInput" placeholder="Type your message here...">
+  </div>
+
+  <script src="js/classes.js"></script>
+  <script src="js/info.js"></script>
+  <script>
+    const userInput = document.getElementById("userInput");
+    const chatbox = document.getElementById("chatbox");
+    let chatHistory = JSON.parse(localStorage.getItem("chatHistory")) || [];
+
+    let currentClass = classes[0];
+    let classRelevanceCounter = 0;
+    let currentClassCustomReplacements = null;
+
+    userInput.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        classRelevanceCounter += 1;
+
+        if (classRelevanceCounter >= 5) {
+          currentClassCustomReplacements = null;
+          classRelevanceCounter = 0; // Reset the counter
+        }
+
+        sendMessage();
+      }
+    });
+
+    function displayMessage(message, isUserMessage) {
+      const newMessage = document.createElement("p");
+      newMessage.textContent = message;
+      if (isUserMessage) {
+        newMessage.classList.add("user-message");
+      } else {
+        newMessage.classList.add("bot-message");
+      }
+      chatbox.appendChild(newMessage);
+      chatbox.scrollTop = chatbox.scrollHeight;
+    }
+
+    function sendMessage() {
+      const userMessage = userInput.value;
+      if (userMessage.trim() !== "") {
+        displayMessage(userMessage, true);
+        chatHistory.push({ user: true, message: userMessage });
+        generateResponse(userMessage);
+        userInput.value = "";
+      }
+    }
+
+    function findMostRelevantInfo(userMessage, info, maxCount) {
+      const userKeywords = userMessage.toLowerCase().split(" ");
+
+      const relevantInfo = info.map((item) => {
+        const itemTags = item.tags.map((tag) => tag.toLowerCase());
+        const matchingTags = itemTags.filter((tag) => userKeywords.includes(tag));
+        return { info: item, matchingTags: matchingTags };
+      });
+
+      relevantInfo.sort((a, b) => b.matchingTags.length - a.matchingTags.length);
+
+      return relevantInfo.slice(0, maxCount);
+    }
+
+    function paraphraseInfo(info) {
+      return info;
+    }
+
+    function getRandomIntroPhrase(introPhrases) {
+      const randomIndex = Math.floor(Math.random() * introPhrases.length);
+      return introPhrases[randomIndex];
+    }
+
+    function getRandomOutroPhrase(outroPhrases) {
+      const randomIndex = Math.floor(Math.random() * outroPhrases.length);
+      return outroPhrases[randomIndex];
+    }
+
+    function getUniqueInfo(info) {
+      return info.filter((item) => !memory.includes(item));
+    }
+
+    function applyCustomReplacements(text, replacements) {
+      if (currentClassCustomReplacements) {
+        for (const word in replacements) {
+          const possibleReplacements = replacements[word];
+          if (Array.isArray(possibleReplacements) && possibleReplacements.length > 0) {
+            const randomIndex = Math.floor(Math.random() * possibleReplacements.length);
+            const replacement = possibleReplacements[randomIndex];
+            const regex = new RegExp("\\b" + word + "\\b", "gi");
+            text = text.replace(regex, replacement);
+          }
+        }
+      }
+      return text;
+    }
+
+    function generateResponse(userMessage) {
+      let response;
+      let outroPhrase = "";
+
+      for (const classObj of classes) {
+        const relevantInfo = findMostRelevantInfo(userMessage, info, 5);
+        const matchingTags = classObj.tags.filter((tag) =>
+          userMessage.toLowerCase().includes(tag)
+        );
+
+        if (matchingTags.length > 0 && relevantInfo.length > 0) {
+          classRelevanceCounter = 0;
+          currentClass = classObj;
+          currentClassCustomReplacements = classObj.customReplacements;
+
+          const introPhrase = getRandomIntroPhrase(classObj.introPhrases);
+          const relevantFacts = relevantInfo.map((item) => paraphraseInfo(item.info.text));
+          const uniqueFacts = getUniqueInfo(relevantFacts);
+
+          if (uniqueFacts.length > 0) {
+            const mostRelevantFact = uniqueFacts[0];
+            const tagsFromResponse = mostRelevantFact.toLowerCase().split(" ");
+
+            tagsFromResponse.forEach((tag) => {
+              if (!userMessage.includes(tag) && tag !== "") {
+                userMessage += ` ${tag}`;
+              }
+            });
+
+            response = `${introPhrase}${mostRelevantFact}`;
+            memory.push(mostRelevantFact);
+            response = applyCustomReplacements(response, classObj.customReplacements);
+            outroPhrase = getRandomOutroPhrase(classObj.outroPhrases);
+            break;
+          } else {
+            response = "I apologize, but I've run out of new information on that topic.";
+          }
+        }
+      }
+
+      if (!response) {
+        const generalInfo = findMostRelevantInfo(userMessage, info, 5);
+        if (generalInfo.length > 0) {
+          classRelevanceCounter = 0;
+          currentClass = classes[0];
+          currentClassCustomReplacements = classes[0].customReplacements;
+
+          const introPhrase = getRandomIntroPhrase(classes[0].introPhrases);
+          const relevantFacts = generalInfo.map((item) => paraphraseInfo(item.info.text));
+          const uniqueFacts = getUniqueInfo(relevantFacts);
+
+          if (uniqueFacts.length > 0) {
+            const mostRelevantFact = uniqueFacts[0];
+            const tagsFromResponse = mostRelevantFact.toLowerCase().split(" ");
+
+            tagsFromResponse.forEach((tag) => {
+              if (!userMessage.includes(tag) && tag !== "") {
+                userMessage += ` ${tag}`;
+              }
+            });
+
+            response = `${introPhrase}${mostRelevantFact}`;
+            memory.push(mostRelevantFact);
+            response = applyCustomReplacements(response, classes[0].customReplacements);
+            outroPhrase = getRandomOutroPhrase(classes[0].outroPhrases);
+          } else {
+            response = "I apologize, but I've run out of new information on that topic.";
+          }
+        } else {
+          response = "I am sorry but I don't have an answer for that";
+        }
+      }
+
+      response += ` ${outroPhrase}`;
+
+      displayMessage(response, false);
+      chatHistory.push({ user: false, message: response });
+      localStorage.setItem("chatHistory", JSON.stringify(chatHistory));
+    }
+
+    let memory = [];
+  </script>
+
+  <script>
+    const currentTheme = localStorage.getItem("theme");
+    if (currentTheme === "inverted") {
+      document.body.classList.add("inverted-theme");
+    }
+  </script>
+</body>
+
+</html>
